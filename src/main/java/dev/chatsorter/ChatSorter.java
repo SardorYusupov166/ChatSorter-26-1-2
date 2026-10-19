@@ -1,0 +1,181 @@
+package dev.chatsorter;
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.minecraft.resources.Identifier;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+public class ChatSorter implements ClientModInitializer {
+    public enum Tab { NEARBY("Общий чат"), DM("ЛС"), SPY("Spy"), CONSOLE("Консоль"), ALL("Все");
+        public final String title; Tab(String title) { this.title = title; }
+    }
+    public static Tab selected = Tab.NEARBY;
+    // Keep the 1.4.5 multi-category behavior: each category is an independent
+    // switch, while “Все” toggles the complete set.
+    private static final boolean[] enabledFilters = {true, true, true, true};
+    private static String searchQuery = "";
+    public static String searchQuery() { return searchQuery; }
+    public static void setSearchQuery(String query) {
+        String next = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+        if (next.equals(searchQuery)) return;
+        searchQuery = next;
+        refreshChat();
+    }
+    public static boolean isSearching() { return !searchQuery.isEmpty(); }
+    public static boolean filterEnabled(Tab tab) {
+        if (tab == Tab.ALL) {
+            for (boolean enabled : enabledFilters) if (!enabled) return false;
+            return true;
+        }
+        return enabledFilters[tab.ordinal()];
+    }
+    // Vanilla 26.1.2 retains ALL messages and supports a visibility predicate.
+    // Unlike old clear/replay logic this doesn't erase signatures, timestamps or chat history.
+    private static void refreshChat() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui == null) return;
+        mc.gui.getChat().setVisibleMessageFilter(line -> shouldShow(line.content()));
+    }
+    public static boolean shouldShow(Component message) {
+        String str = message.getString();
+        if (isSearching()) return str.toLowerCase(Locale.ROOT).contains(searchQuery);
+        return filterEnabled(classifyForDisplay(str));
+    }
+    private static Tab classifyForDisplay(String str) {
+        if (str.startsWith("[ChatSorter]") || str.startsWith("Автор: ") || str.startsWith("Сервер: ")
+                || str.startsWith("ChatSorter 1.4.5 |")) return Tab.NEARBY;
+        return classify(str);
+    }
+    public static final int[] unread = new int[Tab.values().length];
+    // The server may place the arrow either inside or outside the nickname bracket.
+    // Chat Heads can insert a nested "[nickname head]" decoration before the nickname.
+    private static final java.util.regex.Pattern PRIVATE_MESSAGE = java.util.regex.Pattern.compile(
+        "^\\[(?:\\[~?[^\\]\\r\\n]+\\s+head\\])?~?[^\\]\\r\\n]{1,80}\\s*(?:->|→|<-|←)\\s*[^\\]\\r\\n]{1,80}\\]\\s*.+$");
+    private static final java.util.regex.Pattern PRIVATE_MESSAGE_OUTSIDE = java.util.regex.Pattern.compile(
+        "^\\[(?:\\[~?[^\\]\\r\\n]+\\s+head\\])?~?[^\\]\\r\\n]{1,80}\\]\\s*(?:->|→|<-|←)\\s*(?:я|мне|me|[A-Za-z0-9_]{3,16})\\s+.+$",
+        java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    public static String timestamp(Component message) { return java.time.LocalTime.now().withNano(0).toString(); }
+    private static final java.util.IdentityHashMap<Component,String> times = new java.util.IdentityHashMap<>();
+    private static final java.util.Map<String,String> latestTimes = new java.util.HashMap<>();
+    public static String copyRenderedLine(String line) {
+        return "[" + latestTimes.getOrDefault(line, java.time.LocalTime.now().withNano(0).toString()) + "] " + line;
+    }
+    public static String copyText(Component text) { return "[" + times.getOrDefault(text, java.time.LocalTime.now().withNano(0).toString()) + "] " + text.getString(); }
+
+    private static final List<Component>[] history = new List[]{new ArrayList<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>()};
+    @Override public void onInitializeClient() {
+        ChatPosition.load();
+        KeywordAlerts.load();
+        ChatTheme.load();
+        AlertHotkey.load();
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            AlertHotkey.tick(client);
+            if (client.player != null && client.screen == null && AlertHotkey.needsSetup()) AlertHotkey.prompt();
+        });
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("chatsorter", "unread_dm"), (context, tickCounter) -> {
+            int unreadDm = unread[Tab.DM.ordinal()];
+            if (unreadDm <= 0) return;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.options.hideGui) return;
+            String label = "ЛС: " + unreadDm + " непрочитанных";
+            int textWidth = mc.font.width(label);
+            int right = context.guiWidth() - 6;
+            int top = mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen ? 29 : 7;
+            context.fill(right - textWidth - 14, top, right, top + 18, 0xDD292D32);
+            context.fill(right - textWidth - 14, top, right - textWidth - 11, top + 18, ChatTheme.bright());
+            PortDraw.drawTextWithShadow(context,mc.font, label, right - textWidth - 7, top + 5, 0xFFFFFFFF);
+        });
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            // Start a fresh per-server history, then deliver the greeting locally.
+            reset();
+            String serverName = client.getCurrentServer() == null ? "singleplayer_or_unknown" : client.getCurrentServer().ip;
+            ChatSorterDiagnostics.startSession(serverName);
+            client.execute(() -> {
+                if (client.player == null) return;
+                client.gui.getChat().addClientSystemMessage(Component.literal("[ChatSorter] Мод успешно загружен!").withStyle(style -> style.withColor(0x55FF55)));
+                client.gui.getChat().addClientSystemMessage(Component.literal("Автор: ").withStyle(style -> style.withColor(0xFFCC55))
+                    .append(Component.literal("mlpgod").withStyle(style -> style.withColor(0xFFFFFF))));
+                client.gui.getChat().addClientSystemMessage(Component.literal("Сервер: ").withStyle(style -> style.withColor(0xFFCC55))
+                    .append(Component.literal("MigosMC").withStyle(style -> style.withColor(0xFFFFFF))));
+                client.gui.getChat().addClientSystemMessage(Component.literal("ChatSorter 1.4.5 | mlpgod - MigosMC").withStyle(style -> style.withColor(0xAAAAAA)));
+            });
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> { ChatSorterDiagnostics.endSession(); reset(); });
+    }
+
+    public static void capture(Component message) {
+        Tab tab = classifyForDisplay(message.getString());
+        KeywordAlerts.notifyIfMatched(message.getString());
+        ChatSorterDiagnostics.record(message, tab.name(), enabledFilterNames(), filterEnabled(tab));
+        List<Component> messages = history[tab.ordinal()];
+        Component stored = message.copy();
+        messages.add(stored);
+        times.put(stored, timestamp(message));
+        latestTimes.put(message.getString(), times.get(stored));
+        List<Component> allMessages = history[Tab.ALL.ordinal()];
+        Component allStored = message.copy();
+        allMessages.add(allStored);
+        times.put(allStored, times.get(stored));
+        if (allMessages.size() > 300) times.remove(allMessages.remove(0));
+        if (messages.size() > 300) times.remove(messages.remove(0));
+        if (!filterEnabled(tab)) { unread[tab.ordinal()]++; unread[Tab.ALL.ordinal()]++; }
+    }
+    // Server prefixes may contain formatting, non-breaking spaces or icon glyphs.
+    private static final java.util.regex.Pattern GAME_TAG = java.util.regex.Pattern.compile(
+        "\\[\\s*([GLSɢʟꜱ])\\s*\\]", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+
+    private static Tab classify(String original) {
+        String s = original.replace('\u00a0', ' ').replace('\u200b', ' ').replace('\u200c', ' ')
+            .replace('\u200d', ' ').replaceAll("§[0-9a-fk-orA-FK-OR]", "").strip();
+        String lower = s.toLowerCase(Locale.ROOT);
+        // Explicit Console/Spy prefixes take priority over embedded chat markers.
+        // MigosMC uses Unicode small-cap glyphs ɢ (U+0262) and ʟ (U+029F).
+        if (!lower.startsWith("[console]") && !lower.startsWith("[консоль]")
+                && (PRIVATE_MESSAGE.matcher(s).matches() || PRIVATE_MESSAGE_OUTSIDE.matcher(s).matches())) return Tab.DM;
+        // Server announcements are public chat, not console diagnostics.
+        if (lower.matches("^\\s*\\[\\s*объявлени[ея]\\s*\\].*")) return Tab.NEARBY;
+        if (lower.startsWith("[console]") || lower.startsWith("[консоль]")) return Tab.CONSOLE;
+        if (lower.startsWith("[spy]") || lower.startsWith("[socialspy]") || lower.startsWith("[commandspy]")) return Tab.SPY;
+        java.util.regex.Matcher game = GAME_TAG.matcher(s);
+        if (game.find() && game.start() < 100) return Tab.NEARBY;
+        if (lower.contains("socialspy") || lower.contains("commandspy") || lower.contains("/msg ") || lower.contains("/tell ")) return Tab.SPY;
+        if (lower.contains("[игрок]") || lower.contains("[рядом]") || lower.contains("[локальный]")) return Tab.NEARBY;
+        if (lower.startsWith("<") || lower.startsWith("[чат]") || lower.startsWith("[chat]")) return Tab.NEARBY;
+        return Tab.CONSOLE;
+    }
+    private static String enabledFilterNames() {
+        List<String> names = new ArrayList<>();
+        for (Tab tab : Tab.values()) if (tab != Tab.ALL && filterEnabled(tab)) names.add(tab.name());
+        return names.isEmpty() ? "NONE" : String.join(",", names);
+    }
+    public static void toggleFilter(Tab tab) {
+        if (tab == Tab.ALL) {
+            boolean allOn = true;
+            for (boolean enabled : enabledFilters) allOn &= enabled;
+            java.util.Arrays.fill(enabledFilters, !allOn);
+            if (!allOn) java.util.Arrays.fill(unread, 0);
+        } else {
+            enabledFilters[tab.ordinal()] = !enabledFilters[tab.ordinal()];
+            if (enabledFilters[tab.ordinal()]) unread[tab.ordinal()] = 0;
+        }
+        selected = tab;
+        refreshChat();
+    }
+    public static void switchTo(Tab tab) { toggleFilter(tab); }
+    public static void reset() {
+        for (List<Component> messages : history) messages.clear();
+        times.clear();
+        latestTimes.clear();
+        java.util.Arrays.fill(unread, 0);
+        java.util.Arrays.fill(enabledFilters, true);
+        selected = Tab.NEARBY;
+        searchQuery = "";
+        refreshChat();
+    }
+}
