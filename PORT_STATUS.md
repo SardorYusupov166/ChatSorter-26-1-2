@@ -1,6 +1,6 @@
 # Port status: ChatSorter 1.4.5 → Minecraft 26.2
 
-This is an alpha source port. The workspace cannot run Gradle locally because it has Java 17 and no Gradle installation; Minecraft 26.2 requires Java 25. The 26.2 CI compile and a Minecraft launch test are still pending.
+This is an alpha source port. The first Java 25 CI compile found one reference to the removed `Options.hideGui` field; it has been changed to `Minecraft.gui.hud.isHidden()`. The workspace cannot run Gradle locally because it has Java 17 and no Gradle installation. A corrected CI compile and a Minecraft launch test are still pending.
 
 The branch uses 26.2 Mojang names and the modern ChatComponent hooks. Minecraft 26.2 screen access is routed through `Minecraft.gui`; chat HUD access uses `Minecraft.gui.hud`. It contains no old `ChatHudMixin` / `ChatHudAccess` Yarn sources and does not hide stale source files with compiler excludes. A GitHub Actions workflow compiles with Java 25 and retains the build log for review.
 

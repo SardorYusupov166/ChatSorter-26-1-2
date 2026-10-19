@@ -82,7 +82,7 @@ public class ChatSorter implements ClientModInitializer {
             int unreadDm = unread[Tab.DM.ordinal()];
             if (unreadDm <= 0) return;
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player == null || mc.options.hideGui) return;
+            if (mc.player == null || mc.gui.hud.isHidden()) return;
             String label = "ЛС: " + unreadDm + " непрочитанных";
             int textWidth = mc.font.width(label);
             int right = context.guiWidth() - 6;
