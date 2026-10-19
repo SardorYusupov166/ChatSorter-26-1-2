@@ -125,7 +125,7 @@ public abstract class ChatScreenMixin extends Screen {
     private boolean chatsorter$copyAt(double mouseX, double mouseY) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return false;
-        ChatComponent chat = mc.gui.getChat();
+        ChatComponent chat = mc.gui.hud.getChat();
         double scale = mc.options.chatScale().get();
         if (scale <= 0) return false;
         double chatX = (mouseX - ChatPosition.x) / scale;
@@ -139,7 +139,7 @@ public abstract class ChatScreenMixin extends Screen {
         String fullMessage = lines.get(index).parent().content().getString();
         if (fullMessage.isBlank()) return false;
         mc.keyboardHandler.setClipboard(ChatSorter.copyRenderedLine(fullMessage));
-        mc.gui.getChat().addClientSystemMessage(Component.literal("[ChatSorter] Сообщение скопировано"));
+        mc.gui.hud.getChat().addClientSystemMessage(Component.literal("[ChatSorter] Сообщение скопировано"));
         return true;
     }
     // Poll the mouse while chat is open; the vanilla screen does not expose a

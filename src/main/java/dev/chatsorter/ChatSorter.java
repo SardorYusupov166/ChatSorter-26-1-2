@@ -35,12 +35,12 @@ public class ChatSorter implements ClientModInitializer {
         }
         return enabledFilters[tab.ordinal()];
     }
-    // Vanilla 26.1.2 retains ALL messages and supports a visibility predicate.
+    // Vanilla 26.2 retains ALL messages and supports a visibility predicate.
     // Unlike old clear/replay logic this doesn't erase signatures, timestamps or chat history.
     private static void refreshChat() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui == null) return;
-        mc.gui.getChat().setVisibleMessageFilter(line -> shouldShow(line.content()));
+        mc.gui.hud.getChat().setVisibleMessageFilter(line -> shouldShow(line.content()));
     }
     public static boolean shouldShow(Component message) {
         String str = message.getString();
@@ -76,7 +76,7 @@ public class ChatSorter implements ClientModInitializer {
         AlertHotkey.load();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             AlertHotkey.tick(client);
-            if (client.player != null && client.screen == null && AlertHotkey.needsSetup()) AlertHotkey.prompt();
+            if (client.player != null && client.gui.screen() == null && AlertHotkey.needsSetup()) AlertHotkey.prompt();
         });
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("chatsorter", "unread_dm"), (context, tickCounter) -> {
             int unreadDm = unread[Tab.DM.ordinal()];
@@ -86,7 +86,7 @@ public class ChatSorter implements ClientModInitializer {
             String label = "ЛС: " + unreadDm + " непрочитанных";
             int textWidth = mc.font.width(label);
             int right = context.guiWidth() - 6;
-            int top = mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen ? 29 : 7;
+            int top = mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen ? 29 : 7;
             context.fill(right - textWidth - 14, top, right, top + 18, 0xDD292D32);
             context.fill(right - textWidth - 14, top, right - textWidth - 11, top + 18, ChatTheme.bright());
             PortDraw.drawTextWithShadow(context,mc.font, label, right - textWidth - 7, top + 5, 0xFFFFFFFF);
@@ -98,12 +98,12 @@ public class ChatSorter implements ClientModInitializer {
             ChatSorterDiagnostics.startSession(serverName);
             client.execute(() -> {
                 if (client.player == null) return;
-                client.gui.getChat().addClientSystemMessage(Component.literal("[ChatSorter] Мод успешно загружен!").withStyle(style -> style.withColor(0x55FF55)));
-                client.gui.getChat().addClientSystemMessage(Component.literal("Автор: ").withStyle(style -> style.withColor(0xFFCC55))
+                client.gui.hud.getChat().addClientSystemMessage(Component.literal("[ChatSorter] Мод успешно загружен!").withStyle(style -> style.withColor(0x55FF55)));
+                client.gui.hud.getChat().addClientSystemMessage(Component.literal("Автор: ").withStyle(style -> style.withColor(0xFFCC55))
                     .append(Component.literal("mlpgod").withStyle(style -> style.withColor(0xFFFFFF))));
-                client.gui.getChat().addClientSystemMessage(Component.literal("Сервер: ").withStyle(style -> style.withColor(0xFFCC55))
+                client.gui.hud.getChat().addClientSystemMessage(Component.literal("Сервер: ").withStyle(style -> style.withColor(0xFFCC55))
                     .append(Component.literal("MigosMC").withStyle(style -> style.withColor(0xFFFFFF))));
-                client.gui.getChat().addClientSystemMessage(Component.literal("ChatSorter 1.4.5 | mlpgod - MigosMC").withStyle(style -> style.withColor(0xAAAAAA)));
+                client.gui.hud.getChat().addClientSystemMessage(Component.literal("ChatSorter 1.4.5 | mlpgod - MigosMC").withStyle(style -> style.withColor(0xAAAAAA)));
             });
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> { ChatSorterDiagnostics.endSession(); reset(); });

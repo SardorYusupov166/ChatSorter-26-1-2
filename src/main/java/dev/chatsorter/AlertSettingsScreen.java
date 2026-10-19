@@ -265,7 +265,7 @@ public final class AlertSettingsScreen extends Screen {
                 return true;
             }
             if(y>=settingsTop() && y<settingsBottom() && x>=sx && x<sx+Math.min(sw,190) && y>=oy+205 && y<oy+228) { ChatTheme.next(); return true; }
-            if(y>=settingsTop() && y<settingsBottom() && x>=sx && x<sx+Math.min(sw,160) && y>=oy+263 && y<oy+285) { minecraft.setScreen(new HotkeySetupScreen(this)); return true; }
+            if(y>=settingsTop() && y<settingsBottom() && x>=sx && x<sx+Math.min(sw,160) && y>=oy+263 && y<oy+285) { minecraft.gui.setScreen(new HotkeySetupScreen(this)); return true; }
             if(y>=settingsTop() && y<settingsBottom() && x>=sx && x<=sx+sw && y>=oy+23 && y<oy+38) { KeywordAlerts.setVolume((float)((x-sx)/sw)); return true; }
             if(y>=settingsTop() && y<settingsBottom() && x>=sx && x<sx+sw && y>=oy+85 && y<oy+108) {
                 soundPickerOpen=true; soundPickerScroll=0; soundCategory=0; soundSearch.setValue(""); soundSearch.setVisible(true);
@@ -290,5 +290,5 @@ public final class AlertSettingsScreen extends Screen {
         settingsScroll=Math.max(0,Math.min(maxSettingsScroll(),settingsScroll-step*16));
         return true;
     }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
 }

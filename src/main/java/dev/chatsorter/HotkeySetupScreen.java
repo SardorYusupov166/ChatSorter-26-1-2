@@ -13,7 +13,7 @@ public final class HotkeySetupScreen extends Screen {
         long handle=minecraft.getWindow().handle();
         for(int k=GLFW.GLFW_KEY_SPACE;k<=GLFW.GLFW_KEY_LAST;k++){
             boolean pressed=GLFW.glfwGetKey(handle,k)==GLFW.GLFW_PRESS;
-            if(wait<=0 && pressed && !previous[k] && k!=GLFW.GLFW_KEY_ESCAPE){AlertHotkey.assign(k);minecraft.setScreen(parent);return;}
+            if(wait<=0 && pressed && !previous[k] && k!=GLFW.GLFW_KEY_ESCAPE){AlertHotkey.assign(k);minecraft.gui.setScreen(parent);return;}
             previous[k]=pressed;
         }
         if(wait>0)wait--;
@@ -25,5 +25,5 @@ public final class HotkeySetupScreen extends Screen {
         PortDraw.drawCenteredTextWithShadow(c,font,"ESC — позже (при следующем входе предложим снова)",width/2,height/2+16,0xFFAAAAAA);
         super.extractRenderState(c,mx,my,delta);
     }
-    @Override public void onClose(){minecraft.setScreen(parent);}
+    @Override public void onClose(){minecraft.gui.setScreen(parent);}
 }
